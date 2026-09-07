@@ -401,16 +401,17 @@ class AnalyticalModel:
         self._nus = None
         self.times = None
         self.temperature_floor = temperature_floor
-        self.add_filter(filters)
+        self.add_filters(filters)
 
         if times is not None:
             self.times = jnp.asarray(times)
 
     # -- filter management ---------------------------------------------------
 
-    def add_filter(self, filters):
+    def add_filters(self, filters):
         if isinstance(filters, (str, fiesta_filters.Filter)):
             filters = [filters]
+        
         for filt in filters:
             if isinstance(filt, str):
                 F = fiesta_filters.Filter(filt)
@@ -418,9 +419,13 @@ class AnalyticalModel:
                 F = filt
             else:
                 raise TypeError("Filter must be a name string or Filter object.")
+            
             if F.name not in self.filters:
                 self.filters.append(F.name)
                 self.Filters.append(F)
+
+        jax.clear_caches()
+        
         self._build_nu_grid()
 
     def _build_nu_grid(self):

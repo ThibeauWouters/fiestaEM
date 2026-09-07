@@ -200,19 +200,28 @@ class SurrogateModel:
 
         return times, mag_apps
     
-    def add_filter(self, filters: list[str] | str | fiesta_filters.Filter):
+    def add_filters(self, filters: list[str] | str | fiesta_filters.Filter):
         if isinstance(filters, str) or isinstance(filters, fiesta_filters.Filter):
             filters = [filters]
         
         for filt in filters:
             if isinstance(filt, str):
-                self.filters.append(filt)
-                self.Filters.append(fiesta_filters.Filter(filt))
+                F = fiesta_filters.Filter(filt)
             elif isinstance(filt, fiesta_filters.Filter):
-                self.Filters.append(filt)
-                self.filters.append(filt.name)
+                F = filt
             else:
-                raise ValueError(f"Added filter needs to be a valid filter name or a fiesta.filters.Filter object.")
+                raise TypeError(f"Filter needs to be a string or a Filter object.")
+
+            if hasattr(self, "nus"):
+                if F.nus[0]<self.nus[0] or F.nus[-1]>self.nus[-1]:
+                    logger.warning(f"Filter {F.name} outside of frequency range of {self.name} surrogate. Not adding to the filter list.")
+                    continue
+
+            if F.name not in self.filters:
+                self.filters.append(F.name)
+                self.Filters.append(F)
+
+        jax.clear_caches()
     
     def __repr__(self) -> str:
         return self.name
@@ -513,7 +522,7 @@ class CombinedSurrogate(SurrogateModel):
         mags = jax.tree.map(add_magnitudes, self.filters)
         return self.times, dict(zip(self.filters, mags))
     
-    def add_filter(self, filters: list[str] | str | fiesta_filters.Filter):
+    def add_filters(self, filters: list[str] | str | fiesta_filters.Filter):
         super().add_filter(filters)
         for model in self.models:
             model.add_filter(filters)
