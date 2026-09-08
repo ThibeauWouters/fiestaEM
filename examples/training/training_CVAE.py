@@ -2,9 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 
-from fiesta.train.FluxTrainer import CVAETrainer
-from fiesta.inference.lightcurve_model import FluxModel
-from fiesta.train.neuralnets import NeuralnetConfig
+from fiesta.train import CVAETrainer, DataManager, NeuralnetConfig
 
 #############
 ### SETUP ###
@@ -37,24 +35,26 @@ config = NeuralnetConfig(output_size= int(np.prod(image_size)),
 ###############
 
 
-data_manager_args = dict(file = file,
-                         n_training= n_training, 
-                         n_val= n_val, 
-                         tmin= tmin,
-                         tmax= tmax,
-                         numin = numin,
-                         numax = numax,
-                         special_training=["special_1"],
-                         )
+data = DataManager(
+    file = file,
+    n_training= n_training, 
+    n_val= n_val, 
+    tmin= tmin,
+    tmax= tmax,
+    numin = numin,
+    numax = numax,
+    special_training=["special_1"],
+)
 
 
-trainer = CVAETrainer(name,
-                     outdir,
-                     data_manager_args = data_manager_args,
-                     plots_dir=f"./benchmarks/",
-                     image_size=image_size,
-                     save_preprocessed_data=False
-                     )
+trainer = CVAETrainer(
+    name,
+    outdir,
+    data_manager=data,
+    plots_dir=f"./benchmarks/",
+    image_size=image_size,
+    save_preprocessed_data=False
+)
 
 ###############
 ### FITTING ###
@@ -70,9 +70,4 @@ trainer.save()
 
 print("Producing example lightcurve . . .")
 
-FILTERS = ["ps1::y", "besselli", "bessellv", "bessellux"]
-lc_model = FluxModel(name,
-                     directory=outdir, 
-                     filters=FILTERS)
-
-trainer.plot_example_lc(lc_model)
+trainer.plot_example_lc(["ps1::y", "besselli", "bessellv", "bessellux"])

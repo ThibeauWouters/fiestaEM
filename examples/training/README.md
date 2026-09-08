@@ -5,4 +5,4 @@ Training data is provided in the ``data`` directory, however it is only heavily 
 The full data file is several GB and can be made available upon request to hauke.koehn@uni-potsdam.de.
 
 Since the dataset is insufficient to train a valid surrogate, these scripts should be seen as mere test cases that show which methods and objects to use for the training process.
-The training scripts for the built-in surrogates can be found under the ``surrogates`` directory in the main repo.
+The training scripts for the built-in surrogates can be found under the ``surrogates`` directory in the main repo. They might not be totally up-to-date as the training API evolves, but the scripts in this example folder should work.
