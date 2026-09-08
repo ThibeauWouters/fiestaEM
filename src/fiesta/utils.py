@@ -12,6 +12,7 @@ import scipy.interpolate as interp
 import jax
 import jax.numpy as jnp
 from jax.scipy.stats import truncnorm
+from jaxtyping import Array, Float, Int
 
 
 
