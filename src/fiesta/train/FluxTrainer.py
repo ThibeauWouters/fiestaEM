@@ -31,18 +31,22 @@ class FluxTrainer:
     val_y: Float[Array, "n_val"]
     
     def __init__(self, 
-                 name: str,
+                 model_name: str,
                  outdir: str,
                  plots_dir: str = None,
                  save_preprocessed_data: bool = False) -> None:
         
-        self.name = name
+        self.model_name = model_name
+
         # Check if directories exists, otherwise, create:
         self.outdir = outdir
         if not os.path.exists(self.outdir):
             os.makedirs(self.outdir)
+
         self.plots_dir = plots_dir
-        if self.plots_dir is not None and not os.path.exists(self.plots_dir):
+        if self.plots_dir is None:
+            self.plots_dir = self.outdir
+        if not os.path.exists(self.plots_dir):
             os.makedirs(self.plots_dir)
 
         self.save_preprocessed_data = save_preprocessed_data
@@ -57,7 +61,7 @@ class FluxTrainer:
         self.val_y = None
 
     def __repr__(self) -> str:
-        return f"FluxTrainer(name={self.name})"
+        return f"FluxTrainer(training {self.model_name})"
     
     def preprocess(self):
         raise NotImplementedError
@@ -69,7 +73,7 @@ class FluxTrainer:
         raise NotImplementedError
     
     def plot_learning_curve(self, train_losses, val_losses):
-        fig, ax = plt.subplots(figsize=(10, 5))
+        fig, ax = plt.subplots(figsize=(8, 5))
         epochs = np.arange(1, len(train_losses) + 1)
         ax.plot(epochs, train_losses, "-", lw=1.0, label="Train", color="red")
         ax.plot(epochs, val_losses, "-", lw=1.0, label="Validation", color="blue")
@@ -77,22 +81,28 @@ class FluxTrainer:
         # Mark best validation epoch
         best_idx = np.argmin(val_losses)
         ax.axvline(best_idx + 1, color="blue", ls="--", alpha=0.4, lw=0.8)
-        ax.annotate(f"best val @ {best_idx + 1}", xy=(best_idx + 1, val_losses[best_idx]),
-                    fontsize=8, color="blue", alpha=0.7,
+        ax.annotate(f"Best val @ {best_idx + 1}", 
+                    xy=(0.6, 0.8), xycoords="figure fraction",
+                    fontsize=11, color="blue", alpha=0.7,
                     xytext=(10, 10), textcoords="offset points")
 
-        ax.legend(fontsize=11)
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("Loss")
+        ax.legend(fontsize=11, fancybox=False, framealpha=1)
+        ax.set_xlabel("Epoch", fontsize=14)
+        ax.set_ylabel("Loss", fontsize=14)
         ax.set_yscale("log")
-        ax.set_title("Learning curves")
+        ax.set_title("Learning curves", fontsize=16)
         ax.grid(True, alpha=0.3)
-        fig.savefig(os.path.join(self.plots_dir, f"learning_curves_{self.name}.png"),
+        fig.savefig(os.path.join(self.plots_dir, f"learning_curves_{self.model_name}.png"),
                     bbox_inches="tight", dpi=150)
         plt.close(fig)
     
-    def plot_example_lc(self, lc_model):
-        _, _, X, y = self.data_manager.load_raw_data_from_file(0,1) # loads validation data
+    def plot_example_lc(self, filters: list[str]):
+
+        from fiesta.inference import FluxModel
+        lc_model = FluxModel(self.model_name, filters, self.outdir)
+
+        _, _, X, y = self.data_manager.load_raw_data_from_file(n_training=0, n_val=1) # loads validation data
+
         y = y.reshape(len(self.data_manager.nus), len(self.data_manager.times))        
         mJys_val = np.power(10, y)
         params = dict(zip(self.parameter_names, X.flatten() ))
@@ -114,9 +124,7 @@ class FluxTrainer:
             plt.xscale('log')
             plt.xlim(lc_model.times[0], lc_model.times[-1])
 
-            if self.plots_dir is None:
-                self.plots_dir = "."
-            plt.savefig(os.path.join(self.plots_dir, f"{self.name}_{filt.name}_example.png"), bbox_inches="tight")
+            plt.savefig(os.path.join(self.plots_dir, f"{self.model_name}_{filt.name}_example.png"), bbox_inches="tight")
             plt.close()
     
     def save(self) -> None:
@@ -126,7 +134,7 @@ class FluxTrainer:
         The NN is saved as a pickled serialized dict using the NN.save_model method.
         """
         # Save the metadata
-        meta_filename = os.path.join(self.outdir, f"{self.name}_metadata.pkl")
+        meta_filename = os.path.join(self.outdir, f"{self.model_name}_metadata.pkl")
         
         save = {}
         save["times"] = self.times
@@ -141,50 +149,54 @@ class FluxTrainer:
             dill.dump(save, meta_file)
         
         # Save the NN
-        self.network.save_model(outfile=os.path.join(self.outdir, f"{self.name}.pkl"))
+        self.network.save_model(outfile=os.path.join(self.outdir, f"{self.model_name}.pkl"))
     
     def _save_preprocessed_data(self) -> None:
         logger.info("Saving preprocessed data . . .")
-        np.savez(os.path.join(self.outdir, f"{self.name}_preprocessed_data.npz"), train_X=self.train_X, train_y=self.train_y, val_X=self.val_X, val_y=self.val_y)
+        np.savez(os.path.join(self.outdir, f"{self.model_name}_preprocessed_data.npz"), train_X=self.train_X, train_y=self.train_y, val_X=self.val_X, val_y=self.val_y)
         logger.info("Saving preprocessed data . . . done")
 
 class PCATrainer(FluxTrainer):
     
-    def __init__(self,
-                 name: str,
-                 outdir: str,
-                 data_manager_args: dict,
-                 n_pca: Int = 100,
-                 conversion: str = None,
-                 plots_dir: str = None,
-                 save_preprocessed_data: bool = False) -> None:
+    def __init__(
+            self,
+            model_name: str,
+            outdir: str,
+            data_manager: DataManager,
+            n_pca: Int = 100,
+            conversion: str = None,
+            plots_dir: str = None,
+            save_preprocessed_data: bool = False
+        ) -> None:
         """
         FluxTrainer for training a feed-forward neural network on the PCA coefficients of the training data to predict the full 2D spectral flux density array.
         Initializing will read the data and preprocess it with the DataManager class. It can then be fit with the fit() method. 
         To write the surrogate model to file, the save() method is to be used, which will create two pickle files (one for the metadata, one for the neural network).
 
         Args:
-            name (str): Name of the model to be trained. Will be used when saving metadata and model to file.
+            model_name (str): Name of the model to be trained. Will be used when saving metadata and model to file.
             outdir (str): Directory where the NN and its metadata will be written to file.
-            data_manager_args (dict): Arguments for the DataManager class instance that will be used to read the data from the .h5 file in outdir and preprocess it.
+            data_manager (dict): DataManager class instance that will be used to read the data from the .h5 file in outdir and preprocess it.
             n_pca (int): Number of PCA components that will be kept when performing data preprocessing. Defaults to 100.
             conversion (str): references how to convert the parameters for the training. Defaults to None, in which case it's the identity.
-            plots_dir (str): Directory where the loss curves will be plotted. If None, the plot will not be created. Defaults to None.
-            save_preprocessed_data (bool): Whether the preprocessed (i.e. PCA decomposed) training and validation data will be written to file. Defaults to False.
+            plots_dir (str): Directory where the loss curves will be plotted. If ``None``, plots will be saved to ``outdir``. Defaults to None.
+            save_preprocessed_data (bool): Whether the preprocessed (i.e. PCA decomposed) training and validation data will be written to file. Defaults to ``False``.
         """
 
-        super().__init__(name = name,
-                         outdir = outdir,
-                         plots_dir = plots_dir,
-                         save_preprocessed_data = save_preprocessed_data)
+        super().__init__(
+            model_name=model_name,
+            outdir =outdir,
+            plots_dir = plots_dir,
+            save_preprocessed_data = save_preprocessed_data
+        )
         
         self.model_type = "MLP"
 
         self.n_pca = n_pca
         self.conversion = conversion
 
-        self.data_manager = DataManager(**data_manager_args)
-        self.data_manager.print_file_info()
+        self.data_manager = data_manager
+        self.data_manager.print_loaded_data_info()
         self.data_manager.pass_meta_data(self)
        
     def preprocess(self):
@@ -199,10 +211,12 @@ class PCATrainer(FluxTrainer):
         logger.info(f"PCA decomposition accounts for a share {np.sum(self.y_scaler.scalers[0].explained_variance_ratio_)} of the total variance in the training data. This value is hopefully close to 1.")
         logger.info("Preprocessing data . . . done")
     
-    def fit(self,
+    def fit(
+            self,
             config: fiesta_nn.NeuralnetConfig,
             key: jax.random.PRNGKey = jax.random.PRNGKey(0),
-            verbose: bool = True):
+            verbose: bool = True
+        ):
         """
         Method used to initialize a NN based on the architecture specified in config and then fit it based on the learning rate and epoch number specified in config.
         The config controls which architecture is built through config.hidden_layers.
@@ -216,14 +230,14 @@ class PCATrainer(FluxTrainer):
         self.preprocess()
         if self.save_preprocessed_data:
             self._save_preprocessed_data()
-        
-        self.config = config
-        self.config.output_size = self.n_pca # the config.output_size has to be equal to the number of PCA components
+
+        # TODO: very ugly, fix this
+        config.layer_sizes[-1] = self.n_pca # last NN layer has to be equal to the number of PCA components
         input_ndim = self.train_X.shape[1]
 
         
         # Create neural network and initialize the state
-        self.network = fiesta_nn.MLP(config = config, input_ndim = input_ndim, key = key)
+        self.network = fiesta_nn.MLP(config=config, input_ndim=input_ndim, key=key)
                 
         # Perform training loop
         state, train_losses, val_losses = self.network.train_loop(self.train_X, self.train_y, self.val_X, self.val_y, verbose=verbose)
@@ -236,9 +250,9 @@ class PCATrainer(FluxTrainer):
 class CVAETrainer(FluxTrainer):
 
     def __init__(self,
-                 name: str,
-                 outdir,
-                 data_manager_args,
+                 model_name: str,
+                 outdir: str,
+                 data_manager: DataManager,
                  image_size: tuple[Int],
                  conversion: str = None,
                  plots_dir: str = None,
@@ -249,23 +263,25 @@ class CVAETrainer(FluxTrainer):
         To write the surrogate model to file, the save() method is to be used, which will create two pickle files (one for the metadata, one for the neural network).
 
         Args:
-            name (str): Name of the model to be trained. Will be used when saving metadata and model to file.
+            model_name (str): Name of the model to be trained. Will be used when saving metadata and model to file.
             outdir (str): Directory where the NN and its metadata will be written to file.
-            data_manager_args (dict): Arguments for the DataManager class instance that will be used to read the data from the .h5 file in outdir and preprocess it.
+            data_manager (DataManager): DataManager class instance that will be used to read the data from the .h5 file in outdir and preprocess it.
             image_size (tuple(Int)): Size the 2D flux array will be down-sampled to with jax.image.resize when performing data preprocessing.
             conversion (str): references how to convert the parameters for the training. Defaults to None, in which case it's the identity.
-            plots_dir (str): Directory where the loss curves will be plotted. If None, the plot will not be created. Defaults to None.
+            plots_dir (str): Directory where the loss curves will be plotted. If ``None``, plots will be saved to ``outdir``. Defaults to None.
             save_preprocessed_data (bool): Whether the preprocessed (i.e. down sampled and standardized) training and validation data will be written to file. Defaults to False.
         """
         
-        super().__init__(name = name,
-                       outdir = outdir,
-                       plots_dir = plots_dir, 
-                       save_preprocessed_data = save_preprocessed_data)
+        super().__init__(
+            model_name = model_name,
+            outdir = outdir,
+            plots_dir = plots_dir, 
+            save_preprocessed_data = save_preprocessed_data
+        )
         
         self.model_type = "CVAE"
         
-        self.data_manager = DataManager(**data_manager_args)
+        self.data_manager = data_manager
         self.data_manager.print_file_info()
         self.data_manager.pass_meta_data(self)
 
@@ -301,10 +317,9 @@ class CVAETrainer(FluxTrainer):
         if self.save_preprocessed_data:
             self._save_preprocessed_data()
 
-        self.config = config
         config.output_size = int(np.prod(self.image_size)) # Output must be equal to the product of self.image_size.
 
-        self.network = fiesta_nn.CVAE(config=self.config, conditional_dim=self.train_X.shape[1], key=key)
+        self.network = fiesta_nn.CVAE(config=config, conditional_dim=self.train_X.shape[1], key=key)
         state, train_losses, val_losses = self.network.train_loop(self.train_X, self.train_y, self.val_X, self.val_y, verbose=verbose)
 
         # Plot and save the plot if so desired
