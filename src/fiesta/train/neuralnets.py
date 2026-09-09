@@ -116,10 +116,12 @@ def serialize(state: TrainState,
 
 
 class CVAE:
-    def __init__(self,
-                 config: NeuralnetConfig,
-                 conditional_dim: Int,
-                 key: jax.random.PRNGKey = jax.random.key(21)):
+    def __init__(
+            self,
+            config: NeuralnetConfig,
+            conditional_dim: Int,
+            key: jax.random.PRNGKey = jax.random.key(21)
+        ):
         self.config = config
         net = nn.CVAE(hidden_layer_sizes=config.hidden_layer_sizes, latent_dim=config.latent_dim, output_size=config.output_size)
         key, subkey, subkey2 = jax.random.split(key, 3)
@@ -229,7 +231,6 @@ class CVAE:
     def load_model(filename: str) -> tuple[TrainState, NeuralnetConfig]:
         """
         Load a model from a file.
-        TODO: this is very cumbersome now and must be massively improved in the future
     
         Args:
             filename (str): Filename of the model to be loaded.
@@ -269,10 +270,12 @@ class CVAE:
         
 
 class MLP:
-    def __init__(self,
-                 config: NeuralnetConfig,
-                 input_ndim: Int,
-                 key: jax.random.PRNGKey = jax.random.key(21)):
+    def __init__(
+            self,
+            config: NeuralnetConfig,
+            input_ndim: Int,
+            key: jax.random.PRNGKey = jax.random.key(21)
+        ):
         self.config = config
         dropout_rate = getattr(config, 'dropout_rate', 0.0)
         net = nn.MLP(layer_sizes=config.layer_sizes, dropout_rate=dropout_rate)

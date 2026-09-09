@@ -13,10 +13,34 @@ from fiesta.scalers import ParameterScaler, DataScaler
 from fiesta.conversions import apply_redshift
 from fiesta.logging import logger
 
+
 def array_mask_from_interval(sorted_array, amin, amax):
-    indmin = max(0, np.searchsorted(sorted_array, amin, side='right') -1)
-    indmax = min(len(sorted_array)-1, np.searchsorted(sorted_array, amax))
-    mask = np.logical_and(sorted_array>=sorted_array[indmin], sorted_array<=sorted_array[indmax])
+    """
+    Return a mask selecting the grid points spanning [amin, amax].
+    
+    If a boundary exists exactly in the array, that exact value is used.
+    Otherwise, the interval is expanded outward to the nearest grid point.
+
+    Args:
+        sorted_array (array): A sorted array
+        amin (float): Lower interval bound
+        amax (float): Upper interval bound
+
+    Returns:
+        A boolean array mask
+
+    """
+    indmin = np.searchsorted(sorted_array, amin, side="left")
+    if indmin > 0 and sorted_array[indmin] != amin:
+        indmin -= 1
+
+    indmax = np.searchsorted(sorted_array, amax, side="right") - 1
+    if indmax < len(sorted_array) - 1 and sorted_array[indmax] != amax:
+        indmax += 1
+
+    mask = np.zeros(len(sorted_array), dtype=bool)
+    mask[indmin:indmax + 1] = True
+
     return mask
 
 def concatenate_redshift(X_raw, max_z=0.5):
@@ -49,16 +73,17 @@ def redshifted_magnitude(filt, mJys, nus, redshifts):
 
 class DataManager:
     
-    def __init__(self,
-                 file: str,
-                 tmin: Float,
-                 tmax: Float,
-                 numin: Float = 1e9,
-                 numax: Float = 2.5e18,
-                 n_training: Int = None,
-                 n_val: Int = None,
-                 special_training: list = [],
-                 ) -> None:
+    def __init__(
+        self,
+        file: str,
+        tmin: Float,
+        tmax: Float,
+        numin: Float = 1e9,
+        numax: Float = 2.5e18,
+        n_training: Int = None,
+        n_val: Int = None,
+        special_training: list = [],
+    ) -> None:
         """
         DataManager class used to handle and preprocess the raw data from the physical model computations stored in an .h5 file.
         Initializing an instance of this class will only read in the meta data, the actual training data and validation data will only be loaded if one of the preprocessing methods is called.
@@ -75,12 +100,14 @@ class DataManager:
             file (str): Path to the .h5 file that contains the raw data.
             tmin (float): Minimum time for which the data will be read in. Fluxes earlier than this time will not be loaded. Defaults to the minimum time of the stored data, if smaller than that value.
             max (float): Maximum time for which the data will be read in. Fluxes later than this time will not be loaded. Defaults to the maximum time of the stored data, if larger than that value.
-            numin (float): Minimum frequency for which the data will be read in. Fluxes with frequencies lower than this frequency will not be loaded. Defaults to the minimum frequency of the stored data, if smaller than that value.
-            numax (float): Maximum frequency for which the data will be read in. Fluxes with frequencies higher than this frequency will not be loaded. Defaults to the maximum frequency of the stored data, if larger than that value. Defaults to 1e9 Hz (1 GHz).
+            numin (float): Minimum frequency for which the data will be read in. Fluxes with frequencies lower than this frequency will not be loaded. Will be set to the minimum frequency of the stored data, if smaller than that value. Defaults to 1e9 Hz (1 GHz).
+            numax (float): Maximum frequency for which the data will be read in. Fluxes with frequencies higher than this frequency will not be loaded. Will be set to the maximum frequency of the stored data, if larger than that value. Defaults to 2.5e18 Hz.
             n_training (int): Number of training data points that will be read in and preprocessed. If used with a FluxTrainer, this is also the number of training data points used to train the model. 
-                              Will raise a ValueError, if n_training is larger than the number of training data points stored in the file.
+                              Will raise a ValueError, if ``n_training`` is larger than the number of training data points stored in the file.
+                              Defaults to ``None``, in which case all training samples from the file are used.
             n_val (int): Number of validation data points that will be read in and preprocessed. If used with a FluxTrainer, this is also the number of validation data points used to monitor the training progress. 
-                              Will raise a ValueError, if n_val is larger than the number of validation data points stored in the file.
+                              Will raise a ValueError, if ``n_val`` is larger than the number of validation data points stored in the file.
+                              Defaults to ``None``, in which case all validation samples from the file are used.
     
             special_training (list[str]): Batch of 'special' training data to be added. This can be customly designed training data to cover a certain area of the parameter space more intensily and should be stored in the .h5 file as f['special_train'][label]['X'] and f['special_train'][label]['y'], where label is an entry for this special_training argument. Defaults to [].
         """
@@ -98,6 +125,9 @@ class DataManager:
         
         self.read_metadata_from_file()
         self.set_up_domain_mask()
+
+    def __repr__(self):
+        return f"DataManager({self.file})"
 
     def read_metadata_from_file(self,)->None:
         """
@@ -147,18 +177,42 @@ class DataManager:
         Prints the meta data of the raw data, i.e., time, frequencies, and parameter names to terminal. 
         Also prints how many training, validation, and test data points are available.
         """
+        logger.info(f"File info for {self.file}:")
         with h5py.File(self.file, "r") as f:
-            logger.info(f"Times: {f['times'][0]} {f['times'][-1]}")
-            logger.info(f"Nus: {f['nus'][0]} {f['nus'][-1]}")
-            logger.info(f"Parameter distributions: {f['parameter_distributions'][()].decode('utf-8')}")
-            logger.info("\n")
-            logger.info(f"Training data: {self.n_training_exists}")
-            logger.info(f"Validation data: {self.n_val_exists}")
-            logger.info(f"Test data: {f['test']['X'].shape[0]}")
-            logger.info("Special data:")
+            logger.info(f"   Time range in file: {f['times'][0]:.2f} {f['times'][-1]:.2f} days")
+            logger.info(f"   Frequency range in file: {f['nus'][0]:.2e} {f['nus'][-1]:.2e} Hz")
+            logger.info(f"   Parameter distributions: {f['parameter_distributions'][()].decode('utf-8')}")
+            logger.info("")
+            logger.info(f"   Training data: {self.n_training_exists}")
+            logger.info(f"   Validation data: {self.n_val_exists}")
+            logger.info(f"   Test data: {f['test']['X'].shape[0]}")
+            logger.info(f"   Special data:")
             for key in f['special_train'].keys():
-                logger.info(f"\t {key}: {f['special_train'][key]['X'].shape[0]}   description: {f['special_train'][key].attrs['comment']}")
-            logger.info("\n \n")
+                logger.info(f"   \t {key}: {f['special_train'][key]['X'].shape[0]}   description: {f['special_train'][key].attrs['comment']}")
+            logger.info("")
+
+    def print_loaded_data_info(self,) -> None:
+        """
+        Prints the meta data of the loaded data, i.e., the actually requested time and frequency range to terminal. 
+        Also prints how many training, validation, and test data points will actually be used.
+        """
+
+        logger.info(f"Using the following data from {self.file} for training the surrogate:")
+        with h5py.File(self.file, "r") as f:
+            logger.info(f"   Time range loaded: {self.times[0]:.2f} {self.times[-1]:.2f} days")
+            logger.info(f"   Number of points in the time array: {self.n_times}")
+            logger.info(f"   Frequency range loaded: {self.nus[0]:.2e} {self.nus[-1]:.2e} Hz")
+            logger.info(f"   Number of points in the frequency array: {self.n_nus}")
+            logger.info(f"   Parameter names: {self.parameter_names}")
+
+            logger.info("")
+            logger.info(f"   Training data: {self.n_training}")
+            if self.special_training:
+                logger.info(f"   Special data:")
+                for key in self.special_training:
+                    logger.info(f"   \t {key}: {f['special_train'][key]['X'].shape[0]}   description: {f['special_train'][key].attrs['comment']}")
+            logger.info(f"   Validation data: {self.n_val}")
+            logger.info("")
     
     def load_raw_data_from_file(self, n_training: int=1, n_val: int=0) -> tuple[Array, Array, Array, Array]:
         """Loads raw data for training and validation data and returns them as arrays"""

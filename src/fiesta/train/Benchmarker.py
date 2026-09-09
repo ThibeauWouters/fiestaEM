@@ -12,13 +12,10 @@ from matplotlib.cm import ScalarMappable
 from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
 
-from fiesta.inference.lightcurve_model import LightcurveModel, FluxModel
-from fiesta.inference.plot import latex_labels
-
 class Benchmarker:
 
     def __init__(self,
-                 model: LightcurveModel,
+                 model,
                  data_file: str,
                  filters: list = None,
                  outdir: str = "./benchmarks",
@@ -49,9 +46,15 @@ class Benchmarker:
             self.metric2d = lambda y: np.max(np.abs(y), axis = (1,2))
             self.file_ending = "Linf"
 
+        # load data
         self.get_data()
         self.calculate_error()
         self.get_error_distribution()
+
+        # steal latex_labels from inference
+        # this is a dirty fix for a circular import issue
+        from fiesta.inference.plot import latex_labels
+        self.latex_labels = latex_labels
 
     def get_data(self,):
         
@@ -98,7 +101,7 @@ class Benchmarker:
             pred_y = pred_y.at[mask].set(0.)
             self.error[Filt.name] = self.metric(test_y - pred_y)
 
-        if isinstance(self.model, FluxModel):
+        if hasattr(self.model, "nus"):
             self.nus = self.model.nus
             log_flux_pred = []
             for j in range(len(self.test_X_raw)):
@@ -160,12 +163,13 @@ class Benchmarker:
         self.error_distribution = error_distribution
     
     def benchmark(self,):
-        self.print_correlations()
         self.plot_worst_lightcurves()
         self.plot_error_over_time()
         self.plot_error_distribution()
+        self.plot_lightcurves_mismatch()
 
     def plot_lightcurves_mismatch(self):
+
         if self.metric_name == "$\\mathcal{L}_2$":
             vline = self.metric(np.ones(len(self.times)))
             vmin, vmax = 0, vline*2
@@ -176,7 +180,7 @@ class Benchmarker:
             bins = np.linspace(vmin, vmax, 20)
     
         cmap = colors.LinearSegmentedColormap.from_list(name = "mymap", colors = [(0, "lightblue"), (1, "darkred")])
-        label_dic = {p: latex_labels.get(p, p) for p in self.parameter_names}
+        label_dic = {p: self.latex_labels.get(p, p) for p in self.parameter_names}
 
         for Filt in self.Filters:
 
@@ -214,14 +218,14 @@ class Benchmarker:
             ax[0,-1].vlines([vline], *ax[0,-1].get_ylim(), colors = ["lightgrey"], linestyles = "dashed")
             ax[0,-1].set_yticks([])
                 
-            fig.colorbar(ScalarMappable(norm=colors.Normalize(vmin = vmin, vmax = vmax), cmap = cmap), ax = ax[1:-1, -1])
+            #fig.colorbar(ScalarMappable(norm=colors.Normalize(vmin=vmin, vmax=vmax), cmap=cmap), ax=ax[1:, -1])
             outfile  = f"benchmark_{Filt.name}_{self.file_ending}.pdf"
             
             fig.savefig(os.path.join(self.outdir, outfile))
             plt.close(fig)
     
     def plot_worst_lightcurves(self,):
-        label_dic = {p: latex_labels.get(p, p) for p in self.parameter_names}
+        label_dic = {p: self.latex_labels.get(p, p) for p in self.parameter_names}
 
         MAG_FAINT_CLIP = 40  # magnitudes fainter than this are unphysical
 
@@ -358,7 +362,7 @@ class Benchmarker:
                 print(f"{p}: {np.corrcoef(self.test_X_raw[:,j], error)[0,1]}")
     
     def plot_error_distribution(self,):
-        label_dic = {p: latex_labels.get(p, p) for p in self.parameter_names}
+        label_dic = {p: self.latex_labels.get(p, p) for p in self.parameter_names}
 
         n_params = len(self.parameter_names)
         ncols = min(n_params, 4)

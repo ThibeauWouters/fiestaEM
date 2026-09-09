@@ -163,7 +163,7 @@ class SurrogateModel:
         Returns:
             tuple:
                 times (Array): time array in observer frame
-                mag (dict[str, Array]): The desired magnitudes per filter
+                mag (dict[str, Array]): The predicted magnitudes per filter
         """
         
         # Use saved parameter names to extract the parameters in the correct order into an array
@@ -200,19 +200,28 @@ class SurrogateModel:
 
         return times, mag_apps
     
-    def add_filter(self, filters: list[str] | str | fiesta_filters.Filter):
+    def add_filters(self, filters: list[str] | str | fiesta_filters.Filter):
         if isinstance(filters, str) or isinstance(filters, fiesta_filters.Filter):
             filters = [filters]
         
         for filt in filters:
             if isinstance(filt, str):
-                self.filters.append(filt)
-                self.Filters.append(fiesta_filters.Filter(filt))
+                F = fiesta_filters.Filter(filt)
             elif isinstance(filt, fiesta_filters.Filter):
-                self.Filters.append(filt)
-                self.filters.append(filt.name)
+                F = filt
             else:
-                raise ValueError(f"Added filter needs to be a valid filter name or a fiesta.filters.Filter object.")
+                raise TypeError(f"Filter needs to be a string or a Filter object.")
+
+            if hasattr(self, "nus"):
+                if F.nus[0]<self.nus[0] or F.nus[-1]>self.nus[-1]:
+                    logger.warning(f"Filter {F.name} outside of frequency range of {self.name} surrogate. Not adding to the filter list.")
+                    continue
+
+            if F.name not in self.filters:
+                self.filters.append(F.name)
+                self.Filters.append(F)
+
+        jax.clear_caches()
     
     def __repr__(self) -> str:
         return self.name
@@ -482,8 +491,8 @@ class CombinedSurrogate(SurrogateModel):
 
         Args:
             models (list[SurrogateModel]): A list of the surrogates that should be combined.
-            sample_times (Array): (jax)-numpy array for the source frame time at which the joint emission should be computed.
-                                  Can reach beyond the time range of the individual surrogates, in which case the light curve will be extrapolated as the first value or jnp.inf.
+            sample_times (Array): (jax)-numpy array for the observer frame time at which the joint emission should be computed.
+                                  Can reach beyond the time range of the individual surrogates, in which case the light curve will be extrapolated to the first value (left) or jnp.inf (right).
         """
         self.models = models
         self.times = sample_times
@@ -496,55 +505,45 @@ class CombinedSurrogate(SurrogateModel):
         
         self.filters = list(set(filters))
         self.Filters = [fiesta_filters.Filter(filt) for filt in self.filters]
+
+        self.add_filters(self.filters)
     
     @partial(jax.jit, static_argnums=(0,))
-    def predict(self, x: dict[str, Array]):
+    def predict(self, x: dict[str, Array]) -> tuple[Array, dict[str, Array]]:
+
+        """
+        Predict the joint light curve obtained by combining
+        the light curves from the invidiual submodels.
+
+        Args:
+            x (dict[str, Array]): Input array, unnormalized and untransformed.
+                                  All model parameters from all models need to be specified here.
+        
+        Returns:
+            tuple:
+                times (Array): time array in observer frame
+                mag (dict[str, Array]): The predicted magnitudes per filter
+        """
+
         def predict_per_model(model):
             times, mags = model.predict(x)
-            mag_interp = jax.tree.map(lambda mag: jnp.interp(self.times, times, mag, right=jnp.inf) , mags)
+            mag_interp = jax.tree.map(lambda mag: jnp.interp(self.times, times, mag, right=jnp.inf), mags)
             return mag_interp
-        
         mag_dicts = jax.tree.map(predict_per_model, self.models)
         
         def add_magnitudes(filt):
             filt_mags = jnp.array([_dic.get(filt, jnp.ones_like(self.times)*jnp.inf) for _dic in mag_dicts])
-            total_mag = -2.5 /jnp.log(10) * logsumexp(-.4*jnp.log(10)*filt_mags, axis=0)
+            total_mag = -2.5 / jnp.log(10) * logsumexp(-jnp.log(10) / 2.5 * filt_mags, axis=0)
             return total_mag
-        mags = jax.tree.map(add_magnitudes, self.filters)
-        return self.times, dict(zip(self.filters, mags))
+        added_mags = jax.tree.map(add_magnitudes, self.filters)
+
+        return self.times, dict(zip(self.filters, added_mags))
     
-    def add_filter(self, filters: list[str] | str | fiesta_filters.Filter):
-        super().add_filter(filters)
+    def add_filters(self, filters: list[str] | str | fiesta_filters.Filter):
+        super().add_filters(filters)
         for model in self.models:
-            model.add_filter(filters)
+            model.add_filters(filters)
     
     def __repr__(self):
         return f"Combined surrogate {[model for model in self.models]}"
-  
-
-
-#################
-# MODEL CLASSES #
-#################
-
-class BullaLightcurveModel(LightcurveModel):
-    
-    def __init__(self, 
-                 *args, **kwargs):
-        
-        super().__init__(*args, **kwargs)
-
-class BullaFlux(FluxModel):
-    
-    def __init__(self, 
-                 *args, **kwargs):
-        
-        super().__init__(*args, **kwargs)
-
-class AfterglowFlux(FluxModel):
-    
-    def __init__(self, 
-                 *args, **kwargs):
-        
-        super().__init__(*args, **kwargs)
     
