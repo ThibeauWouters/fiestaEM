@@ -481,22 +481,28 @@ class FluxModel(SurrogateModel):
         return times, nus, log10_flux
     
 class CombinedSurrogate(SurrogateModel):
-    def __init__(self,
-                 models: list[SurrogateModel],
-                 sample_times: Array
-                 ):
+    def __init__(
+            self,
+            models: list[SurrogateModel],
+            sample_times: Array
+        ):
         """
-        API to combine several surrogates in to one object. 
-        The predict method here predicts the joined light curve from the surrogates provided in ``models``.
+        API to combine several models in to one object. 
+        Predicts the joined light curve from the surrogates listed in ``models``.
 
         Args:
             models (list[SurrogateModel]): A list of the surrogates that should be combined.
             sample_times (Array): (jax)-numpy array for the observer frame time at which the joint emission should be computed.
                                   Can reach beyond the time range of the individual surrogates, in which case the light curve will be extrapolated to the first value (left) or jnp.inf (right).
         """
+
         self.models = models
-        self.times = sample_times
+        self.times = jnp.array(sample_times)
         self._load_filters()
+
+        logger.info(f"Initialized {self} with observer frame time range [ {self.times[0].item():.2f} {self.times[-1].item():.2f}] days.")
+        for model in self.models:
+            logger.info(f"\t {model} contributes in {model.filters}.")
     
     def _load_filters(self,):
         filters = []
@@ -545,5 +551,5 @@ class CombinedSurrogate(SurrogateModel):
             model.add_filters(filters)
     
     def __repr__(self):
-        return f"Combined surrogate {[model for model in self.models]}"
+        return f"CombinedModel({[model.name for model in self.models]})"
     
