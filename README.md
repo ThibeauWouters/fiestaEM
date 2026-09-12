@@ -100,7 +100,7 @@ python -m pytest tests/test_models.py
 Install the documentation dependencies:
 
 ```bash
-pip install -e ".[docs]"
+pip install -e ".[dev]"
 ```
 
 Then build the HTML docs from the `docs/` directory:
