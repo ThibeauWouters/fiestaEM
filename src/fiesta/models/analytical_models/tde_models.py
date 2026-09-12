@@ -36,10 +36,10 @@ class TDEAnalyticalModel(AnalyticalModel):
 
     _n_internal = 500
 
-    def __init__(self, filters, times=None, temperature_floor=None):
+    def __init__(self, filters, times=None, temperature_floor=None, name: str | None = None):
         if times is None:
             times = jnp.geomspace(0.1, 200.0, 100)
-        super().__init__(filters, times, temperature_floor=temperature_floor)
+        super().__init__(name or type(self).__name__, filters, times, temperature_floor=temperature_floor)
 
     def compute_log10_lbol_rphot(self, x, t_days):
         log10_l0 = x["log10_l0"]
