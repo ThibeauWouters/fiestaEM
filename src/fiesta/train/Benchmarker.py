@@ -20,12 +20,14 @@ class Benchmarker:
                  filters: list = None,
                  outdir: str = "./benchmarks",
                  metric_name: str = "Linf",
+                 output_format: str = "pdf",
                  ) -> None:
-        
+
         self.model = model
         self.times = self.model.times
         self.file = data_file
         self.outdir = outdir
+        self.output_format = output_format
         
         # Load filters
         if filters is None:
@@ -219,7 +221,7 @@ class Benchmarker:
             ax[0,-1].set_yticks([])
                 
             #fig.colorbar(ScalarMappable(norm=colors.Normalize(vmin=vmin, vmax=vmax), cmap=cmap), ax=ax[1:, -1])
-            outfile  = f"benchmark_{Filt.name}_{self.file_ending}.pdf"
+            outfile  = f"benchmark_{Filt.name}_{self.file_ending}.{self.output_format}"
             
             fig.savefig(os.path.join(self.outdir, outfile))
             plt.close(fig)
@@ -286,7 +288,7 @@ class Benchmarker:
         for i in range(n_filters, nrows * ncols):
             axes[i // ncols, i % ncols].set_visible(False)
 
-        fig.savefig(os.path.join(self.outdir, f"worst_lightcurves_{self.file_ending}.pdf"), dpi=200)
+        fig.savefig(os.path.join(self.outdir, f"worst_lightcurves_{self.file_ending}.{self.output_format}"), dpi=200)
         plt.close(fig)
 
     def plot_error_over_time(self,):
@@ -351,7 +353,7 @@ class Benchmarker:
         for i in range(n_filters, nrows * ncols):
             axes[i // ncols, i % ncols].set_visible(False)
 
-        fig.savefig(os.path.join(self.outdir, "error_over_time.pdf"), dpi=200)
+        fig.savefig(os.path.join(self.outdir, f"error_over_time.{self.output_format}"), dpi=200)
         plt.close(fig)
 
     def print_correlations(self, ):
@@ -400,5 +402,5 @@ class Benchmarker:
         for i in range(n_params, nrows * ncols):
             axes[i // ncols, i % ncols].set_visible(False)
 
-        fig.savefig(os.path.join(self.outdir, "error_distribution.pdf"), dpi=200)
+        fig.savefig(os.path.join(self.outdir, f"error_distribution.{self.output_format}"), dpi=200)
         plt.close(fig)
