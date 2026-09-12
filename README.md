@@ -39,7 +39,7 @@ python -c "from fiesta.surrogates import download_recommended_surrogates; downlo
 
 Surrogates can be loaded in the python shell as 
 ```
-from fiesta.inference.lightcurve_model import FluxModel
+from fiesta.models.surrogate_models import FluxModel
 
 model = FluxModel(name=name, filters=filters, directory=directory)
 ```

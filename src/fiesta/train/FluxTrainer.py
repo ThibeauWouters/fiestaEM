@@ -10,9 +10,10 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
+from fiesta.logging import logger        
 import fiesta.train.neuralnets as fiesta_nn
 from fiesta.train.DataManager import DataManager
-from fiesta.logging import logger
+
 
 ################
 # TRAINING API #
@@ -97,9 +98,8 @@ class FluxTrainer:
         plt.close(fig)
     
     def plot_example_lc(self, filters: list[str]):
-
-        from fiesta.inference import FluxModel
-        lc_model = FluxModel(self.model_name, filters, self.outdir)
+        from fiesta.models import FluxSurrogate
+        lc_model = FluxSurrogate(self.model_name, filters, self.outdir)
 
         _, _, X, y = self.data_manager.load_raw_data_from_file(n_training=0, n_val=1) # loads validation data
 
@@ -130,8 +130,8 @@ class FluxTrainer:
     def save(self) -> None:
         """
         Save the trained model and all the metadata to the outdir.
-        The meta data is saved as a pickled dict to be read by fiesta.inference.lightcurve_model.SurrogateLightcurveModel.
-        The NN is saved as a pickled serialized dict using the NN.save_model method.
+        The meta data is saved as a pickled dict to be read by ``fiesta.models.surrogate_models.Surrogate``.
+        The NN is saved as a pickled serialized dict using the ``NN.save_model`` method.
         """
         # Save the metadata
         meta_filename = os.path.join(self.outdir, f"{self.model_name}_metadata.pkl")
