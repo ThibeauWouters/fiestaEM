@@ -10,7 +10,7 @@ import jax.numpy as jnp
 
 from fiesta.constants import days_to_seconds
 
-from fiesta.inference.analytical_models.base import (
+from fiesta.models.analytical_models.base import (
     AnalyticalModel,
     _gauss_legendre_nodes_weights,
     _magnetar_luminosity,
@@ -310,8 +310,10 @@ class CSMInteractionModel(AnalyticalModel):
         import numpy as np
         import os
 
-        table_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                  "tables", "csm_table.txt")
+        import fiesta.inference.tables
+
+        table_path = os.path.join(list(fiesta.inference.tables.__path__)[0],
+                                  "csm_table.txt")
         data = np.loadtxt(table_path, delimiter=',')
         # Columns: eta_col(10 unique), nn_col(30 unique), Bf, Br, AA
         # (matches Redback's column order in utils.get_csm_properties)

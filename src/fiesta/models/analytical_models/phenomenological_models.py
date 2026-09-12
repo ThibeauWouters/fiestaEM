@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array
 
-from fiesta.inference.analytical_models.base import (
+from fiesta.models.analytical_models.base import (
     AnalyticalModel,
     _LOG10_4PI,
     _LOG10_SIGMASB,

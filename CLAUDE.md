@@ -55,22 +55,26 @@ Note: by default only CPU JAX is installed. GPU support requires `pip install fi
 
 ## Architecture
 
-### Two independent halves: training and inference
+### Three independent pieces: training, models, and inference
 
-The package has a training pipeline (`src/fiesta/train/`) that produces surrogate model artifacts, and an inference pipeline (`src/fiesta/inference/`) that consumes them. They only interact through the on-disk surrogate format (a `.pkl` metadata file + Flax/dill model files in a `model/` subdirectory).
+The package has a training pipeline (`src/fiesta/train/`) that produces surrogate model artifacts, a model layer (`src/fiesta/models/`) that defines everything with a `predict()` lightcurve interface (trained surrogates and analytical physics models alike), and an inference pipeline (`src/fiesta/inference/`) that consumes model objects to run Bayesian parameter estimation. Training and models interact only through the on-disk surrogate format (a `.pkl` metadata file + Flax/dill model files in a `model/` subdirectory).
 
 ### Surrogate model loading (`src/fiesta/surrogates/`)
 
 - `manage_surrogates.py` implements three ways surrogates get resolved: (1) **built-in** — surrogates present under `src/fiesta/surrogates/{KN,GRB}/<model_name>/`, discovered by directory scan (`built_in_surrogates()`); (2) **download** from the `nuclear-multimessenger-astronomy/fiesta-surrogates` Hugging Face repo (`download_surrogate()`), which lands them in a built-in location so they become auto-loadable; (3) **explicit directory** — any `.pkl`/model directory path passed by the user.
-- `lightcurve_model.py`'s `get_default_directory()` is the resolution order used when a model is loaded by name only: check built-ins first, then attempt a Hugging Face download, else raise.
+- `models/surrogate_models.py`'s `get_default_directory()` is the resolution order used when a model is loaded by name only: check built-ins first, then attempt a Hugging Face download, else raise.
 - Surrogate artifacts are large (some GB); mock/reduced training data lives in `examples/training/data/`, and full training data (>10GB) is not distributed in-repo — contact the maintainers for it (see README).
+
+### Model layer (`src/fiesta/models/`)
+
+- **`surrogate_models.py`** — `SurrogateModel` (abstract base) → `FluxModel` / `LightcurveModel` subclasses that load a trained surrogate and predict lightcurves/spectra from physical parameters, plus `CombinedSurrogate` for combining several models (surrogate or analytical) into one joint-emission predictor.
+- **`analytical_models/`** — non-surrogate, ab-initio physical models (kilonova, phenomenological, SALT3, shock-powered, supernova, TDE) sharing an `AnalyticalModel` base (`base.py`), useful for validation against or in place of surrogates. All models across both submodules share the same `predict(x) -> (times, {filter: mag})` contract, though the two hierarchies aren't yet unified under one shared base class (`AnalyticalModel` is currently missing a `.name` attribute that `SurrogateModel` has — a known gap, see `CombinedSurrogate.__repr__`).
+- `fiesta.inference.tables` (a data-only, `__init__.py`-less namespace package under `src/fiesta/inference/tables/`) holds `csm_table.txt`, referenced by `analytical_models/supernova_models.py`'s CSM interaction model — it did not move with the rest of the model code.
 
 ### Inference pipeline (`src/fiesta/inference/`)
 
 Central orchestrator is `Fiesta` in `fiesta.py`, which wires together:
-- **`lightcurve_model.py`** — `SurrogateModel` (abstract base) → `FluxModel` / `LightcurveModel` subclasses that load a trained surrogate and predict lightcurves/spectra from physical parameters. Also exposes `AfterglowpyGRB`/other analytical models (see `analytical_models/`) as drop-in alternatives that don't require a trained surrogate but are much slower.
-- **`analytical_models/`** — non-surrogate, ab-initio physical models (kilonova, phenomenological, SALT3, shock-powered, supernova, TDE) sharing a `base.py` interface, useful for validation against or in place of surrogates.
-- **`prior/`** — `Prior`/`prior_dict.py` define parameter priors; sampling and naming conventions here must match `parameter_names` on the surrogate/model being used.
+- **`prior/`** — `Prior`/`prior_dict.py` define parameter priors; sampling and naming conventions here must match `parameter_names` on the model being used.
 - **`likelihood.py`** — `EMLikelihood` combines observed photometry (detections + non-detections, per-filter times) with a model and systematic-error setup to produce a log-likelihood usable by any sampler.
 - **`systematic.py`** — sets up systematic uncertainty either as a single fixed `error_budget` (mag) or from a YAML config (`setup_systematic_from_file`, see `examples/inference/systematics_file_*.yaml` for the schema).
 - **`samplers/`** — pluggable backends behind a common interface: `flowmc` (default, optional dep `flowMC`), `blackjax-smc`, `numpyro-svi`, `blackjax_nested_sampling`. `Fiesta.__init__` lazily imports the chosen backend so uninstalled optional samplers don't break unrelated code paths.
@@ -87,7 +91,7 @@ Central orchestrator is `Fiesta` in `fiesta.py`, which wires together:
 - **`LightcurveTrainer.py`** — trains a per-filter collection of surrogates predicting lightcurves directly in specific photometric filters.
 - **`neuralnets.py` / `nn_architectures.py`** — Flax model definitions (MLP and CVAE architectures) and training-state helpers used by both trainers.
 - **`Benchmarker.py`** — evaluates a trained surrogate's accuracy against held-out/validation data.
-- Trainers write out the `metadata.pkl` (scalers, parameter names/distributions, time/frequency grids, model type) + model weights that `SurrogateModel.load_metadata()` expects at inference time — the two must stay in sync if you change either side.
+- Trainers write out the `metadata.pkl` (scalers, parameter names/distributions, time/frequency grids, model type) + model weights that `SurrogateModel.load_metadata()` (in `fiesta.models.surrogate_models`) expects at load time — the two must stay in sync if you change either side.
 - Example training scripts: `examples/training/training_MLP.py` (LightcurveTrainer/MLP) and `examples/training/training_CVAE.py` (FluxTrainer/CVAE), using reduced mock data in `examples/training/data/`.
 
 ### Supporting modules

@@ -10,7 +10,7 @@ import jax.numpy as jnp
 
 from fiesta.constants import c_cgs, msun_cgs, days_to_seconds
 
-from fiesta.inference.analytical_models.base import (
+from fiesta.models.analytical_models.base import (
     AnalyticalModel,
     _magnetar_luminosity,
     _LOG10_MSUN, _LOG10_RSUN, _LOG10_CCGS, _LOG10_4PI,

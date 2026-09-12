@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 from fiesta.constants import days_to_seconds
 
-from fiesta.inference.analytical_models.base import (
+from fiesta.models.analytical_models.base import (
     AnalyticalModel,
     _compute_diffusion_constants,
     _arnett_diffusion_integral,

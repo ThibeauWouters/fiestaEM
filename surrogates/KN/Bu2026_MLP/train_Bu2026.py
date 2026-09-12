@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import h5py
 
 from fiesta.train.FluxTrainer import PCATrainer
-from fiesta.inference.lightcurve_model import FluxModel
+from fiesta.models.surrogate_models import FluxSurrogate
 from fiesta.train.neuralnets import NeuralnetConfig
 from fiesta.train.Benchmarker import Benchmarker
 
@@ -65,11 +65,17 @@ trainer.save()
 print("Producing example lightcurve . . .")
 
 FILTERS = ["ps1::y", "besselli", "bessellv", "bessellux"]
-lc_model = FluxModel(name,
+trainer.plot_example_lc(FILTERS)
+
+
+####################
+### BENCHMARKING ###
+####################
+
+
+lc_model = FluxSurrogate(name,
                      directory=outdir, 
                      filters=FILTERS)
-
-trainer.plot_example_lc(lc_model)
 
 for metric_name in ["L2", "Linf"]:
     benchmarker = Benchmarker(
