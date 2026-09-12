@@ -39,9 +39,9 @@ python -c "from fiesta.surrogates import download_recommended_surrogates; downlo
 
 Surrogates can be loaded in the python shell as 
 ```
-from fiesta.inference.lightcurve_model import FluxModel
+from fiesta.models.surrogate_models import FluxSurrogate
 
-model = FluxModel(name=name, filters=filters, directory=directory)
+model = FluxSurrogate(name=name, filters=filters, directory=directory)
 ```
 
 This means you have to explicitely provide the  `directory` argument that points to the `.pkl` files storing the neural network and surrogate metadata.
@@ -100,7 +100,7 @@ python -m pytest tests/test_models.py
 Install the documentation dependencies:
 
 ```bash
-pip install -e ".[docs]"
+pip install -e ".[dev]"
 ```
 
 Then build the HTML docs from the `docs/` directory:
