@@ -55,6 +55,7 @@ class FiestaModel(abc.ABC):
         raise NotImplemented
 
     def predict_abs_mag(self, x: dict[str, Array]) -> tuple[Array, dict[str, Array]]:
+        x = dict(x) # copy to avoid overwrite the caller's dictionary
         x["luminosity_distance"] = 1e-5
         x["redshift"] = 0.
         return self.predict(x)

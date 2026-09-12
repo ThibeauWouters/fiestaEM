@@ -28,7 +28,9 @@ class CombinedModel(FiestaModel):
 
         self.models = models
         self.times = jnp.array(sample_times)
-        self.parameter_names = list({p for model in self.models for p in model.parameter_names})
+        self.parameter_names = list(dict.fromkeys(
+             p for model in self.models for p in model.parameter_names
+         ))
         self._load_filters()
 
         logger.info(f"Initialized {self} with observer frame time range [ {self.times[0].item():.2f} {self.times[-1].item():.2f}] days.")
@@ -76,9 +78,13 @@ class CombinedModel(FiestaModel):
         return self.times, dict(zip(self.filters, added_mags))
     
     def add_filters(self, filters: list[str] | str | Filter):
-        super().add_filters(filters)
         for model in self.models:
             model.add_filters(filters)
+
+        # only add filters here that have actually been added to at least one model
+        super().add_filters(
+            [filt for model in self.models for filt in model.filters]
+        )
     
     def __repr__(self):
         return f"CombinedModel({[model.name for model in self.models]})"

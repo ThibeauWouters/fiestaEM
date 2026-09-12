@@ -103,7 +103,7 @@ class Surrogate(FiestaModel):
     
     
     def project_input(self, x: Array) -> dict[str, Array]:
-        raise not NotImplementedError
+        raise NotImplementedError
     
     def compute_output(self, x: dict[str, Array]) -> dict[str, Array]:
         raise NotImplementedError
@@ -318,7 +318,7 @@ class LightcurveSurrogate(Surrogate):
             filters: list[str],
             directory: str = None
         ) -> None:
-        super().__init__(name, directory)
+        super().__init__(name, filters, directory)
         
         # Load the filters and networks
         self.load_filters(filters)

@@ -289,7 +289,7 @@ def convert_SEDONA_outputs_to_h5(
     y = np.maximum(y, clip)
     X[:,log_arguments] = np.log10(X[:,log_arguments]) # make mej_dyn and mej_wind to log10
 
-    train_X, val_X, train_y, val_y = train_test_split(X, y, train_size=0.8)
+    train_X, val_X, train_y, val_y = train_test_split(X, y, train_size=train_size)
     val_X, test_X, val_y, test_y = train_test_split(val_X, val_y, train_size=0.5)
     
     parameter_distributions = {p: (np.min(train_X[:,j]).item(), np.max(train_X[:,j]).item(), "uniform") for j, p in enumerate(parameter_names)}
